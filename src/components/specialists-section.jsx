@@ -17,6 +17,7 @@ function SpecialistCard({ data, index, onInitiate }) {
       transition={{ type: "spring", stiffness: 400, damping: 25 }}
       className="min-w-[310px] max-w-[310px] bg-card rounded-3xl border border-border overflow-hidden hover:shadow-[0_24px_64px_oklch(0.52_0.18_260_/_0.08)] hover:border-primary/15 transition-all duration-500 group snap-center flex flex-col"
     >
+      {/* Gradient header */}
       <div
         className={`h-28 bg-gradient-to-br ${
           gradients[index % gradients.length]
@@ -32,10 +33,7 @@ function SpecialistCard({ data, index, onInitiate }) {
         />
 
         <div className="absolute -bottom-11 left-7">
-          <div
-            className="rounded-2xl bg-card border-4 border-card overflow-hidden shadow-xl"
-            style={{ width: 88, height: 88 }}
-          >
+          <div className="w-[88px] h-[88px] rounded-2xl bg-card border-4 border-card overflow-hidden shadow-xl">
             <img
               src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${data.name}`}
               alt={`${data.name} avatar`}
@@ -50,6 +48,7 @@ function SpecialistCard({ data, index, onInitiate }) {
         </div>
       </div>
 
+      {/* Content */}
       <div className="p-7 pt-16 flex-1 flex flex-col">
         <div className="flex items-center gap-2 mb-1">
           <h4 className="font-bold text-lg text-card-foreground tracking-tight">
@@ -151,7 +150,7 @@ export function SpecialistsSection({ specialists, onInitiate }) {
         >
           {specialists.map((doc, i) => (
             <SpecialistCard
-              key={i}
+              key={doc.name}
               data={doc}
               index={i}
               onInitiate={onInitiate}

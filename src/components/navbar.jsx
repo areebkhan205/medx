@@ -1,38 +1,36 @@
-import { HeartPulse, Menu, X } from 'lucide-react'
-import { useState } from 'react'
-import { cn } from '@/lib/utils'
-
+import { cn } from "@/lib/utils"
+import { Menu, X } from "lucide-react"
+import { useState } from "react"
+import logo from "/public/logo.png"
 export function Navbar({ onOpenChat, onAuthClick, isScrolled }) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
     <nav
       className={cn(
-        'fixed top-0 w-full z-[70] transition-all duration-500',
+        "fixed top-0 w-full z-[70] transition-all duration-500",
         isScrolled
-          ? 'bg-card/95 backdrop-blur-2xl py-3 shadow-[0_1px_3px_oklch(0_0_0_/_0.04)] border-b border-border'
-          : 'bg-transparent py-5'
+          ? "bg-card/95 backdrop-blur-2xl py-3 shadow-[0_1px_3px_oklch(0_0_0_/_0.04)] border-b border-border"
+          : "bg-transparent py-5"
       )}
     >
       <div className="max-w-6xl mx-auto px-6 flex justify-between items-center">
         <button
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="flex items-center gap-2.5 group"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="flex items-center gap-3 group"
         >
-          <div
-            className={cn(
-              'p-2 rounded-xl transition-all group-hover:rotate-12 group-hover:scale-110',
-              isScrolled
-                ? 'bg-primary text-primary-foreground shadow-md'
-                : 'bg-white/10 text-white'
-            )}
-          >
-            <HeartPulse size={18} strokeWidth={2.5} />
-          </div>
+          {/* Logo */}
+          <img
+            src={logo}
+            alt="EcoMedX Logo"
+            className="h-9 w-auto transition-transform group-hover:scale-110"
+          />
+
+          {/* Brand Text */}
           <span
             className={cn(
-              'text-lg font-bold tracking-tight transition-colors',
-              isScrolled ? 'text-foreground' : 'text-white'
+              "text-lg font-bold tracking-tight transition-colors",
+              isScrolled ? "text-foreground" : "text-white"
             )}
           >
             ECOMED
@@ -44,35 +42,37 @@ export function Navbar({ onOpenChat, onAuthClick, isScrolled }) {
         <div className="hidden md:flex items-center gap-8">
           <div className="flex items-center gap-1">
             {[
-              { href: '#services', label: 'Services' },
-              { href: '#specialists', label: 'Network' },
+              { href: "#services", label: "Services" },
+              { href: "#specialists", label: "Network" },
             ].map((link) => (
               <a
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  'text-xs font-semibold uppercase tracking-widest px-4 py-2.5 rounded-xl transition-colors',
+                  "text-xs font-semibold uppercase tracking-widest px-4 py-2.5 rounded-xl transition-colors",
                   isScrolled
-                    ? 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                    : 'text-white/40 hover:text-white hover:bg-white/[0.06]'
+                    ? "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    : "text-white/40 hover:text-white hover:bg-white/[0.06]"
                 )}
               >
                 {link.label}
               </a>
             ))}
           </div>
+
           <div className="flex items-center gap-3 pl-4 border-l border-white/10">
             <button
               onClick={onAuthClick}
               className={cn(
-                'text-xs font-semibold px-4 py-2.5 rounded-xl transition-colors',
+                "text-xs font-semibold px-4 py-2.5 rounded-xl transition-colors",
                 isScrolled
-                  ? 'text-foreground hover:bg-muted'
-                  : 'text-white/50 hover:bg-white/[0.06]'
+                  ? "text-foreground hover:bg-muted"
+                  : "text-white/50 hover:bg-white/[0.06]"
               )}
             >
               Sign In
             </button>
+
             <button
               onClick={() => onOpenChat()}
               className="bg-primary text-primary-foreground px-7 py-2.5 rounded-xl font-semibold text-xs shadow-lg shadow-primary/20 hover:brightness-110 transition-all active:scale-95"
@@ -86,10 +86,10 @@ export function Navbar({ onOpenChat, onAuthClick, isScrolled }) {
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
           className={cn(
-            'md:hidden p-2 rounded-lg transition-colors',
-            isScrolled ? 'text-foreground' : 'text-white'
+            "md:hidden p-2 rounded-lg transition-colors",
+            isScrolled ? "text-foreground" : "text-white"
           )}
-          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
         >
           {mobileOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
@@ -105,6 +105,7 @@ export function Navbar({ onOpenChat, onAuthClick, isScrolled }) {
           >
             Services
           </a>
+
           <a
             href="#specialists"
             onClick={() => setMobileOpen(false)}
@@ -112,6 +113,7 @@ export function Navbar({ onOpenChat, onAuthClick, isScrolled }) {
           >
             Network
           </a>
+
           <div className="pt-4 border-t border-border flex flex-col gap-3">
             <button
               onClick={() => {
@@ -122,6 +124,7 @@ export function Navbar({ onOpenChat, onAuthClick, isScrolled }) {
             >
               Sign In
             </button>
+
             <button
               onClick={() => {
                 setMobileOpen(false)

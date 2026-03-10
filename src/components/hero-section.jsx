@@ -1,5 +1,6 @@
 import { motion } from "framer-motion"
 import { Activity, ShieldCheck, Zap } from "lucide-react"
+import LightPillar from "../components/LightPillar"
 
 const fadeUp = (delay) => ({
   initial: { opacity: 0, y: 30 },
@@ -11,20 +12,34 @@ export function HeroSection({ onAccessClick }) {
   return (
     <section className="relative min-h-dvh flex flex-col items-center justify-center overflow-hidden">
 
-      {/* Background */}
+      {/* Animated Background */}
       <div className="absolute inset-0 z-0">
-        <img
-          src="/images/hero-bg.jpg"
-          alt=""
-          className="w-full h-full object-cover"
-        />
 
-        <div className="absolute inset-0 bg-[oklch(0.08_0.02_260)]/70" />
+        {/* Light Pillar */}
+        <div className="absolute inset-0">
+          <LightPillar
+            topColor="#5227FF"
+            bottomColor="#FF9FFC"
+            intensity={1}
+            rotationSpeed={0.3}
+            glowAmount={0.002}
+            pillarWidth={3}
+            pillarHeight={0.4}
+            noiseIntensity={0.5}
+            pillarRotation={25}
+            interactive={false}
+            mixBlendMode="screen"
+            quality="high"
+          />
+        </div>
 
+        {/* Dark overlay */}
+        <div className="absolute inset-0 bg-[oklch(0.08_0.02_260)]/75" />
+
+        {/* Radial light */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_center,oklch(0.30_0.14_260_/_0.4)_0%,transparent_55%)]" />
 
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,oklch(0.20_0.08_200_/_0.3)_0%,transparent_45%)]" />
-
+        {/* Subtle grid */}
         <div
           className="absolute inset-0 opacity-[0.015]"
           style={{
@@ -33,23 +48,12 @@ export function HeroSection({ onAccessClick }) {
             backgroundSize: "60px 60px",
           }}
         />
-
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/2 left-0 w-full h-px bg-primary/10 animate-line-scan" />
-        </div>
-
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,oklch(0.08_0.02_260)_100%)]" />
       </div>
 
       {/* Content */}
       <div className="relative z-20 max-w-5xl mx-auto px-6 text-center pt-36 pb-24">
 
-        <motion.div {...fadeUp(0)}>
-          <div className="inline-flex items-center gap-3 bg-white/[0.06] backdrop-blur-2xl px-6 py-3 rounded-full border border-white/[0.1] text-primary text-xs font-semibold tracking-wider mb-12">
-            <span className="w-2 h-2 rounded-full bg-primary animate-blink" />
-            AI-Powered Clinical Platform
-          </div>
-        </motion.div>
+      
 
         <motion.h1
           {...fadeUp(0.15)}
@@ -121,8 +125,6 @@ export function HeroSection({ onAccessClick }) {
         </motion.div>
 
       </div>
-
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-card to-transparent z-30 pointer-events-none" />
     </section>
   )
 }
