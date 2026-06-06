@@ -50,27 +50,25 @@ export function ChatWorkstation({ isOpen, onClose, doctor }) {
       }))
 
       // 3. Call the Gemini API natively (No CORS proxy needed!)
-     const response = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
-  ,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+   const response = await fetch(
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      system_instruction: {
+        parts: [
+          {
+            text: "You are a helpful medical AI assistant named MediBot Core. Only answer basic health-related questions. If a question is not health-related, politely decline to answer. Keep responses concise. Always recommend consulting a real doctor for serious issues.",
           },
-          body: JSON.stringify({
-            // System instructions keep the bot focused on healthcare
-            system_instruction: {
-              parts: [
-                {
-                  text: "You are a helpful medical AI assistant named MediBot Core. Only answer basic health-related questions. If a question is not health-related, politely decline to answer. Keep responses concise. Always recommend consulting a real doctor for serious issues.",
-                },
-              ],
-            },
-            contents: geminiHistory,
-          }),
-        }
-      )
+        ],
+      },
+      contents: geminiHistory,
+    }),
+  }
+)
 
       // 4. Catch exact API errors 
       if (!response.ok) {
