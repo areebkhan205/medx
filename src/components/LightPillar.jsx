@@ -1,346 +1,361 @@
-import { useEffect, useRef, useState } from 'react';
-import * as THREE from 'three';
+import { Mesh, Program, Renderer, Triangle } from 'ogl';
+import { useEffect, useRef } from 'react';
 
-const LightPillar = ({
-  topColor = '#5227FF',
-  bottomColor = '#FF9FFC',
-  intensity = 1.0,
-  rotationSpeed = 0.3,
-  interactive = false,
-  className = '',
-  glowAmount = 0.005,
-  pillarWidth = 3.0,
-  pillarHeight = 0.4,
-  noiseIntensity = 0.5,
-  mixBlendMode = 'screen',
-  pillarRotation = 0,
-  quality = 'high'
+const MAX_COLORS = 8;
+
+const hexToRGB = hex => {
+  const c = hex.replace('#', '').padEnd(6, '0');
+  const r = parseInt(c.slice(0, 2), 16) / 255;
+  const g = parseInt(c.slice(2, 4), 16) / 255;
+  const b = parseInt(c.slice(4, 6), 16) / 255;
+  return [r, g, b];
+};
+
+const prepColors = input => {
+  const base = (input && input.length ? input : ['#A6C8FF', '#5227FF', '#FF9FFC']).slice(0, MAX_COLORS);
+  const count = base.length;
+  const arr = [];
+  for (let i = 0; i < MAX_COLORS; i++) arr.push(hexToRGB(base[Math.min(i, base.length - 1)]));
+  const avg = [0, 0, 0];
+  for (let i = 0; i < count; i++) {
+    avg[0] += arr[i][0];
+    avg[1] += arr[i][1];
+    avg[2] += arr[i][2];
+  }
+  avg[0] /= count;
+  avg[1] /= count;
+  avg[2] /= count;
+  return { arr, count, avg };
+};
+
+const vertex = `
+attribute vec2 position;
+attribute vec2 uv;
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = vec4(position, 0.0, 1.0);
+}
+`;
+
+const fragment = `
+precision highp float;
+
+uniform vec3  iResolution;
+uniform vec2  iMouse;
+uniform float iTime;
+
+uniform vec3  uColor0;
+uniform vec3  uColor1;
+uniform vec3  uColor2;
+uniform vec3  uColor3;
+uniform vec3  uColor4;
+uniform vec3  uColor5;
+uniform vec3  uColor6;
+uniform vec3  uColor7;
+uniform int   uColorCount;
+
+uniform vec3  uBgColor;
+uniform vec3  uMouseColor;
+uniform float uSpeed;
+uniform int   uStreakCount;
+uniform float uStreakWidth;
+uniform float uStreakLength;
+uniform float uGlow;
+uniform float uDensity;
+uniform float uTwinkle;
+uniform float uZoom;
+uniform float uBgGlow;
+uniform float uOpacity;
+uniform float uMouseEnabled;
+uniform float uMouseStrength;
+uniform float uMouseRadius;
+
+varying vec2 vUv;
+
+vec3 palette(float h) {
+  int count = uColorCount;
+  if (count < 1) count = 1;
+  int idx = int(floor(clamp(h, 0.0, 0.999999) * float(count)));
+  if (idx <= 0) return uColor0;
+  if (idx == 1) return uColor1;
+  if (idx == 2) return uColor2;
+  if (idx == 3) return uColor3;
+  if (idx == 4) return uColor4;
+  if (idx == 5) return uColor5;
+  if (idx == 6) return uColor6;
+  return uColor7;
+}
+
+vec3 tanhv(vec3 x) {
+  vec3 e = exp(-2.0 * x);
+  return (1.0 - e) / (1.0 + e);
+}
+
+vec2 sceneC(vec2 frag, vec2 r) {
+  vec2 P = (frag + frag - r) / r.x;
+  float z = 0.0;
+  float d = 1e3;
+  vec4 O = vec4(0.0);
+  for (int k = 0; k < 39; k++) {
+    if (d <= 1e-4) break;
+    O = z * normalize(vec4(P, uZoom, 0.0)) - vec4(0.0, 4.0, 1.0, 0.0) / 4.5;
+    d = 1.0 - sqrt(length(O * O));
+    z += d;
+  }
+  return vec2(O.x, atan(O.z, O.y));
+}
+
+void mainImage(out vec4 o, vec2 C) {
+  vec2 r = iResolution.xy;
+  vec2 uv0 = (C + C - r) / r.x;
+  float T = 0.1 * iTime * uSpeed + 9.0;
+  float angRings = max(1.0, floor(6.28318530718 * max(uDensity, 0.05) + 0.5));
+  vec2 Y = vec2(5e-3, 6.28318530718 / angRings);
+
+  vec2 c0 = sceneC(C, r);
+  vec2 cdx = sceneC(C + vec2(1.0, 0.0), r);
+  vec2 cdy = sceneC(C + vec2(0.0, 1.0), r);
+  vec2 dCx = cdx - c0;
+  vec2 dCy = cdy - c0;
+  dCx.y -= 6.28318530718 * floor(dCx.y / 6.28318530718 + 0.5);
+  dCy.y -= 6.28318530718 * floor(dCy.y / 6.28318530718 + 0.5);
+  vec2 fw = abs(dCx) + abs(dCy);
+  C = c0;
+
+  vec2 P = vec2(2.0, 1.0) * uv0 - (r / r.x) * vec2(0.0, 1.0);
+  vec4 O = vec4(uBgColor * 90.0 * uBgGlow / (1e3 * dot(P, P) + 6.0), 0.0);
+
+  float mGlow = 0.0;
+  if (uMouseEnabled > 0.5) {
+    vec2 mN = (iMouse + iMouse - r) / r.x;
+    float md = length(uv0 - mN);
+    mGlow = exp(-md * md / max(uMouseRadius * uMouseRadius, 1e-4)) * uMouseStrength;
+    O.rgb += uMouseColor * mGlow * 0.25;
+  }
+
+  float zr = 5e-4 * uStreakWidth;
+  vec2 rr = vec2(max(length(fw), 1e-5));
+  float tail = 19.0 / max(uStreakLength, 0.05);
+
+  for (int m = 0; m < 16; m++) {
+    if (m >= uStreakCount) break;
+    float jf = float(m) + 1.0;
+    float ic = fract(sin(dot(vec2(jf, floor(C.x / Y.x + 0.5)), vec2(7.0, 11.0)) * 73.0));
+    vec2 Pp = C - (T + T * ic) * vec2(0.0, 1.0);
+    Pp -= floor(Pp / Y + 0.5) * Y;
+    float h = fract(8663.0 * ic);
+    vec3 col = palette(h);
+    float weight = mix(1.5, 1.0 + sin(T + 7.0 * h + 4.0), uTwinkle);
+    weight *= (1.0 + mGlow * 2.0);
+    vec2 inner = vec2(length(max(Pp, vec2(-1.0, 0.0))), length(Pp) - zr) - zr;
+    vec2 sm = vec2(1.0) - smoothstep(-rr, rr, inner);
+    O.rgb += dot(sm, vec2(exp(tail * Pp.y), 3.0)) * col * weight;
+    C.x += Y.x / 8.0;
+  }
+
+  vec3 colr = sqrt(tanhv(max(O.rgb * uGlow - vec3(0.04, 0.08, 0.02), 0.0)));
+  o = vec4(colr, uOpacity);
+}
+
+void main() {
+  vec4 color;
+  mainImage(color, vUv * iResolution.xy);
+  gl_FragColor = color;
+}
+`;
+
+const Lightfall = ({
+  className,
+  dpr,
+  paused = false,
+  colors = ['#A6C8FF', '#5227FF', '#FF9FFC'],
+  backgroundColor = '#0A29FF',
+  speed = 0.5,
+  streakCount = 2,
+  streakWidth = 1,
+  streakLength = 1,
+  glow = 1,
+  density = 0.6,
+  twinkle = 1,
+  zoom = 3,
+  backgroundGlow = 0.5,
+  opacity = 1,
+  mouseInteraction = true,
+  mouseStrength = 0.5,
+  mouseRadius = 1,
+  mouseDampening = 0.15,
+  mixBlendMode
 }) => {
   const containerRef = useRef(null);
   const rafRef = useRef(null);
-  const rendererRef = useRef(null);
-  const materialRef = useRef(null);
-  const sceneRef = useRef(null);
-  const cameraRef = useRef(null);
+  const programRef = useRef(null);
+  const meshRef = useRef(null);
   const geometryRef = useRef(null);
-  const mouseRef = useRef(new THREE.Vector2(0, 0));
-  const timeRef = useRef(0);
-  const [webGLSupported, setWebGLSupported] = useState(true);
-
-  // Check WebGL support
-  useEffect(() => {
-    const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    if (!gl) {
-      setWebGLSupported(false);
-    }
-  }, []);
+  const rendererRef = useRef(null);
+  const mouseTargetRef = useRef([0, 0]);
+  const lastTimeRef = useRef(0);
 
   useEffect(() => {
-    if (!containerRef.current || !webGLSupported) return;
-
     const container = containerRef.current;
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+    if (!container) return;
 
-    // Scene setup
-    const scene = new THREE.Scene();
-    sceneRef.current = scene;
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    cameraRef.current = camera;
-
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const isLowEndDevice = isMobile || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
-
-    let effectiveQuality = quality;
-    if (isLowEndDevice && quality === 'high') effectiveQuality = 'medium';
-    if (isMobile && quality !== 'low') effectiveQuality = 'low';
-
-    const qualitySettings = {
-      low: { iterations: 24, waveIterations: 1, pixelRatio: 0.5, precision: 'mediump', stepMultiplier: 1.5 },
-      medium: { iterations: 40, waveIterations: 2, pixelRatio: 0.65, precision: 'mediump', stepMultiplier: 1.2 },
-      high: {
-        iterations: 80,
-        waveIterations: 4,
-        pixelRatio: Math.min(window.devicePixelRatio, 2),
-        precision: 'highp',
-        stepMultiplier: 1.0
-      }
-    };
-
-    const settings = qualitySettings[effectiveQuality] || qualitySettings.medium;
-
-    let renderer;
-    try {
-      renderer = new THREE.WebGLRenderer({
-        antialias: false,
-        alpha: true,
-        powerPreference: effectiveQuality === 'high' ? 'high-performance' : 'low-power',
-        precision: settings.precision,
-        stencil: false,
-        depth: false
-      });
-    } catch (error) {
-      setWebGLSupported(false);
-      return;
-    }
-
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(settings.pixelRatio);
-    container.appendChild(renderer.domElement);
-    rendererRef.current = renderer;
-
-    const parseColor = hex => {
-      const color = new THREE.Color(hex);
-      return new THREE.Vector3(color.r, color.g, color.b);
-    };
-
-    const vertexShader = `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = vec4(position, 1.0);
-      }
-    `;
-
-    const fragmentShader = `
-      precision ${settings.precision} float;
-
-      uniform float uTime;
-      uniform vec2 uResolution;
-      uniform vec2 uMouse;
-      uniform vec3 uTopColor;
-      uniform vec3 uBottomColor;
-      uniform float uIntensity;
-      uniform bool uInteractive;
-      uniform float uGlowAmount;
-      uniform float uPillarWidth;
-      uniform float uPillarHeight;
-      uniform float uNoiseIntensity;
-      uniform float uRotCos;
-      uniform float uRotSin;
-      uniform float uPillarRotCos;
-      uniform float uPillarRotSin;
-      uniform float uWaveSin;
-      uniform float uWaveCos;
-      varying vec2 vUv;
-
-      const float STEP_MULT = ${settings.stepMultiplier.toFixed(1)};
-      const int MAX_ITER = ${settings.iterations};
-      const int WAVE_ITER = ${settings.waveIterations};
-
-      void main() {
-        vec2 uv = (vUv * 2.0 - 1.0) * vec2(uResolution.x / uResolution.y, 1.0);
-        uv = vec2(uPillarRotCos * uv.x - uPillarRotSin * uv.y, uPillarRotSin * uv.x + uPillarRotCos * uv.y);
-
-        vec3 ro = vec3(0.0, 0.0, -10.0);
-        vec3 rd = normalize(vec3(uv, 1.0));
-
-        float rotC = uRotCos;
-        float rotS = uRotSin;
-        if(uInteractive && (uMouse.x != 0.0 || uMouse.y != 0.0)) {
-          float a = uMouse.x * 6.283185;
-          rotC = cos(a);
-          rotS = sin(a);
-        }
-
-        vec3 col = vec3(0.0);
-        float t = 0.1;
-        
-        for(int i = 0; i < MAX_ITER; i++) {
-          vec3 p = ro + rd * t;
-          p.xz = vec2(rotC * p.x - rotS * p.z, rotS * p.x + rotC * p.z);
-
-          vec3 q = p;
-          q.y = p.y * uPillarHeight + uTime;
-          
-          float freq = 1.0;
-          float amp = 1.0;
-          for(int j = 0; j < WAVE_ITER; j++) {
-            q.xz = vec2(uWaveCos * q.x - uWaveSin * q.z, uWaveSin * q.x + uWaveCos * q.z);
-            q += cos(q.zxy * freq - uTime * float(j) * 2.0) * amp;
-            freq *= 2.0;
-            amp *= 0.5;
-          }
-          
-          float d = length(cos(q.xz)) - 0.2;
-          float bound = length(p.xz) - uPillarWidth;
-          float k = 4.0;
-          float h = max(k - abs(d - bound), 0.0);
-          d = max(d, bound) + h * h * 0.0625 / k;
-          d = abs(d) * 0.15 + 0.01;
-
-          float grad = clamp((15.0 - p.y) / 30.0, 0.0, 1.0);
-          col += mix(uBottomColor, uTopColor, grad) / d;
-
-          t += d * STEP_MULT;
-          if(t > 50.0) break;
-        }
-
-        float widthNorm = uPillarWidth / 3.0;
-        col = tanh(col * uGlowAmount / widthNorm);
-        
-        col -= fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) / 15.0 * uNoiseIntensity;
-        
-        gl_FragColor = vec4(col * uIntensity, 1.0);
-      }
-    `;
-
-    const pillarRotRad = (pillarRotation * Math.PI) / 180;
-    const waveSin = Math.sin(0.4);
-    const waveCos = Math.cos(0.4);
-
-    const material = new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader,
-      uniforms: {
-        uTime: { value: 0 },
-        uResolution: { value: new THREE.Vector2(width, height) },
-        uMouse: { value: mouseRef.current },
-        uTopColor: { value: parseColor(topColor) },
-        uBottomColor: { value: parseColor(bottomColor) },
-        uIntensity: { value: intensity },
-        uInteractive: { value: interactive },
-        uGlowAmount: { value: glowAmount },
-        uPillarWidth: { value: pillarWidth },
-        uPillarHeight: { value: pillarHeight },
-        uNoiseIntensity: { value: noiseIntensity },
-        uRotCos: { value: 1.0 },
-        uRotSin: { value: 0.0 },
-        uPillarRotCos: { value: Math.cos(pillarRotRad) },
-        uPillarRotSin: { value: Math.sin(pillarRotRad) },
-        uWaveSin: { value: waveSin },
-        uWaveCos: { value: waveCos }
-      },
-      transparent: true,
-      depthWrite: false,
-      depthTest: false
+    const renderer = new Renderer({
+      dpr: dpr ?? (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1),
+      alpha: true,
+      antialias: true
     });
-    materialRef.current = material;
+    rendererRef.current = renderer;
+    const gl = renderer.gl;
+    const canvas = gl.canvas;
 
-    const geometry = new THREE.PlaneGeometry(2, 2);
-    geometryRef.current = geometry;
-    const mesh = new THREE.Mesh(geometry, material);
-    scene.add(mesh);
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.display = 'block';
+    container.appendChild(canvas);
 
-    let mouseMoveTimeout = null;
-    const handleMouseMove = event => {
-      if (!interactive) return;
+    const { arr, count, avg } = prepColors(colors);
 
-      if (mouseMoveTimeout) return;
-
-      mouseMoveTimeout = window.setTimeout(() => {
-        mouseMoveTimeout = null;
-      }, 16);
-
-      const rect = container.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      mouseRef.current.set(x, y);
+    const uniforms = {
+      iResolution: { value: [gl.drawingBufferWidth, gl.drawingBufferHeight, 1] },
+      iMouse: { value: [0, 0] },
+      iTime: { value: 0 },
+      uColor0: { value: arr[0] },
+      uColor1: { value: arr[1] },
+      uColor2: { value: arr[2] },
+      uColor3: { value: arr[3] },
+      uColor4: { value: arr[4] },
+      uColor5: { value: arr[5] },
+      uColor6: { value: arr[6] },
+      uColor7: { value: arr[7] },
+      uColorCount: { value: count },
+      uBgColor: { value: hexToRGB(backgroundColor) },
+      uMouseColor: { value: avg },
+      uSpeed: { value: speed },
+      uStreakCount: { value: Math.max(1, Math.min(16, Math.round(streakCount))) },
+      uStreakWidth: { value: streakWidth },
+      uStreakLength: { value: streakLength },
+      uGlow: { value: glow },
+      uDensity: { value: density },
+      uTwinkle: { value: twinkle },
+      uZoom: { value: zoom },
+      uBgGlow: { value: backgroundGlow },
+      uOpacity: { value: opacity },
+      uMouseEnabled: { value: mouseInteraction ? 1 : 0 },
+      uMouseStrength: { value: mouseStrength },
+      uMouseRadius: { value: mouseRadius }
     };
 
-    if (interactive) {
-      container.addEventListener('mousemove', handleMouseMove, { passive: true });
+    const program = new Program(gl, { vertex, fragment, uniforms });
+    programRef.current = program;
+
+    const geometry = new Triangle(gl);
+    geometryRef.current = geometry;
+    const mesh = new Mesh(gl, { geometry, program });
+    meshRef.current = mesh;
+
+    const resize = () => {
+      const rect = container.getBoundingClientRect();
+      renderer.setSize(rect.width, rect.height);
+      uniforms.iResolution.value = [gl.drawingBufferWidth, gl.drawingBufferHeight, 1];
+    };
+
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(container);
+
+    const onPointerMove = e => {
+      const rect = canvas.getBoundingClientRect();
+      const scale = renderer.dpr || 1;
+      const x = (e.clientX - rect.left) * scale;
+      const y = (rect.height - (e.clientY - rect.top)) * scale;
+      mouseTargetRef.current = [x, y];
+      if (mouseDampening <= 0) {
+        uniforms.iMouse.value = [x, y];
+      }
+    };
+    if (mouseInteraction) {
+      canvas.addEventListener('pointermove', onPointerMove);
     }
 
-    let lastTime = performance.now();
-    const targetFPS = effectiveQuality === 'low' ? 30 : 60;
-    const frameTime = 1000 / targetFPS;
-
-    const animate = currentTime => {
-      if (!materialRef.current || !rendererRef.current || !sceneRef.current || !cameraRef.current) return;
-
-      const deltaTime = currentTime - lastTime;
-
-      if (deltaTime >= frameTime) {
-        timeRef.current += 0.016 * rotationSpeed;
-        const t = timeRef.current;
-        materialRef.current.uniforms.uTime.value = t;
-        materialRef.current.uniforms.uRotCos.value = Math.cos(t * 0.3);
-        materialRef.current.uniforms.uRotSin.value = Math.sin(t * 0.3);
-        rendererRef.current.render(sceneRef.current, cameraRef.current);
-        lastTime = currentTime - (deltaTime % frameTime);
+    const loop = t => {
+      rafRef.current = requestAnimationFrame(loop);
+      uniforms.iTime.value = t * 0.001;
+      if (mouseDampening > 0) {
+        if (!lastTimeRef.current) lastTimeRef.current = t;
+        const dt = (t - lastTimeRef.current) / 1000;
+        lastTimeRef.current = t;
+        const tau = Math.max(1e-4, mouseDampening);
+        let factor = 1 - Math.exp(-dt / tau);
+        if (factor > 1) factor = 1;
+        const target = mouseTargetRef.current;
+        const cur = uniforms.iMouse.value;
+        cur[0] += (target[0] - cur[0]) * factor;
+        cur[1] += (target[1] - cur[1]) * factor;
+      } else {
+        lastTimeRef.current = t;
       }
-
-      rafRef.current = requestAnimationFrame(animate);
-    };
-    rafRef.current = requestAnimationFrame(animate);
-
-    let resizeTimeout = null;
-    const handleResize = () => {
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
+      if (!paused && programRef.current && meshRef.current) {
+        try {
+          renderer.render({ scene: meshRef.current });
+        } catch (e) {
+          console.error(e);
+        }
       }
-
-      resizeTimeout = window.setTimeout(() => {
-        if (!rendererRef.current || !materialRef.current || !containerRef.current) return;
-        const newWidth = containerRef.current.clientWidth;
-        const newHeight = containerRef.current.clientHeight;
-        rendererRef.current.setSize(newWidth, newHeight);
-        materialRef.current.uniforms.uResolution.value.set(newWidth, newHeight);
-      }, 150);
     };
-
-    window.addEventListener('resize', handleResize, { passive: true });
+    rafRef.current = requestAnimationFrame(loop);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      if (interactive) {
-        container.removeEventListener('mousemove', handleMouseMove);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (mouseInteraction) canvas.removeEventListener('pointermove', onPointerMove);
+      ro.disconnect();
+      if (canvas.parentElement === container) {
+        container.removeChild(canvas);
       }
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-      }
-      if (rendererRef.current) {
-        rendererRef.current.dispose();
-        rendererRef.current.forceContextLoss();
-        if (container.contains(rendererRef.current.domElement)) {
-          container.removeChild(rendererRef.current.domElement);
+      const callIfFn = (obj, key) => {
+        if (obj && typeof obj[key] === 'function') {
+          obj[key].call(obj);
         }
-      }
-      if (materialRef.current) {
-        materialRef.current.dispose();
-      }
-      if (geometryRef.current) {
-        geometryRef.current.dispose();
-      }
-
-      rendererRef.current = null;
-      materialRef.current = null;
-      sceneRef.current = null;
-      cameraRef.current = null;
+      };
+      callIfFn(programRef.current, 'remove');
+      callIfFn(geometryRef.current, 'remove');
+      callIfFn(meshRef.current, 'remove');
+      callIfFn(rendererRef.current, 'destroy');
+      programRef.current = null;
       geometryRef.current = null;
-      rafRef.current = null;
+      meshRef.current = null;
+      rendererRef.current = null;
     };
   }, [
-    topColor,
-    bottomColor,
-    intensity,
-    rotationSpeed,
-    interactive,
-    glowAmount,
-    pillarWidth,
-    pillarHeight,
-    noiseIntensity,
-    pillarRotation,
-    webGLSupported,
-    quality
+    dpr,
+    paused,
+    colors,
+    backgroundColor,
+    speed,
+    streakCount,
+    streakWidth,
+    streakLength,
+    glow,
+    density,
+    twinkle,
+    zoom,
+    backgroundGlow,
+    opacity,
+    mouseInteraction,
+    mouseStrength,
+    mouseRadius,
+    mouseDampening
   ]);
 
-  if (!webGLSupported) {
-    return (
-      <div
-        className={`w-full h-full absolute top-0 left-0 flex items-center justify-center bg-black/10 text-gray-500 text-sm ${className}`}
-        style={{ mixBlendMode }}
-      >
-        WebGL not supported
-      </div>
-    );
-  }
-
   return (
-    <div ref={containerRef} className={`w-full h-full absolute top-0 left-0 ${className}`} style={{ mixBlendMode }} />
+    <div
+      ref={containerRef}
+      className={`w-full h-full overflow-hidden relative ${className ?? ''}`}
+      style={{
+        ...(mixBlendMode && { mixBlendMode })
+      }}
+    />
   );
 };
 
-export default LightPillar;
+export default Lightfall;

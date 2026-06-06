@@ -9,6 +9,9 @@ export function ChatWorkstation({ isOpen, onClose, doctor }) {
   const [loading, setLoading] = useState(false)
   const scrollRef = useRef(null)
 
+  // Your free Gemini API Key
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
   useEffect(() => {
     if (isOpen) {
       setMessages([
@@ -28,24 +31,76 @@ export function ChatWorkstation({ isOpen, onClose, doctor }) {
     }
   }, [messages, loading])
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim() || loading) return
 
-    const msg = input
+    const userMessage = input
     setInput('')
-    setMessages((prev) => [...prev, { role: 'user', text: msg }])
+    
+    // 1. Update UI immediately
+    const newMessages = [...messages, { role: 'user', text: userMessage }]
+    setMessages(newMessages)
     setLoading(true)
 
-    setTimeout(() => {
+    try {
+      // 2. Format history for Gemini (Gemini uses 'user' and 'model' roles)
+      const geminiHistory = newMessages.slice(1).map((m) => ({
+        role: m.role === 'bot' ? 'model' : 'user',
+        parts: [{ text: m.text }],
+      }))
+
+      // 3. Call the Gemini API natively (No CORS proxy needed!)
+     const response = await fetch(
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
+  ,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            // System instructions keep the bot focused on healthcare
+            system_instruction: {
+              parts: [
+                {
+                  text: "You are a helpful medical AI assistant named MediBot Core. Only answer basic health-related questions. If a question is not health-related, politely decline to answer. Keep responses concise. Always recommend consulting a real doctor for serious issues.",
+                },
+              ],
+            },
+            contents: geminiHistory,
+          }),
+        }
+      )
+
+      // 4. Catch exact API errors 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error?.message || `HTTP Error ${response.status}`)
+      }
+
+      const data = await response.json()
+
+      // 5. Extract and display the response
+      if (data.candidates && data.candidates.length > 0) {
+        const botResponse = data.candidates[0].content.parts[0].text
+        setMessages((prev) => [...prev, { role: 'bot', text: botResponse }])
+      } else {
+        throw new Error('Unexpected API response structure')
+      }
+    } catch (error) {
+      console.error('API Process Error:', error)
+      
+      // Print the specific error directly into the chat UI
       setMessages((prev) => [
         ...prev,
         {
           role: 'bot',
-          text: 'Thank you for your question. Based on the information provided, I recommend scheduling a consultation with one of our specialists for a thorough evaluation. In the meantime, please ensure you maintain regular health monitoring and stay hydrated. Would you like me to provide more details on any specific aspect?',
+          text: `⚠️ System Error: ${error.message}`,
         },
       ])
+    } finally {
       setLoading(false)
-    }, 1500)
+    }
   }
 
   const handleKeyDown = (e) => {
@@ -178,7 +233,7 @@ export function ChatWorkstation({ isOpen, onClose, doctor }) {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className={cn(
-                      'max-w-[75%] lg:max-w-[60%] px-5 py-4 rounded-2xl',
+                      'max-w-[75%] lg:max-w-[60%] px-5 py-4 rounded-2xl whitespace-pre-wrap',
                       m.role === 'user'
                         ? 'bg-primary text-primary-foreground rounded-br-md'
                         : 'bg-card text-card-foreground shadow-sm border border-border rounded-bl-md'
@@ -214,7 +269,7 @@ export function ChatWorkstation({ isOpen, onClose, doctor }) {
                 <button
                   onClick={handleSend}
                   disabled={loading || !input.trim()}
-                  className="bg-primary text-primary-foreground p-3 rounded-xl"
+                  className="bg-primary text-primary-foreground p-3 rounded-xl disabled:opacity-50 transition-opacity"
                 >
                   <Send size={18} />
                 </button>

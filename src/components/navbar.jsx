@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 import { Menu, X } from "lucide-react"
 import { useState } from "react"
-import logo from "/public/logo.png"
+import logo from "../assets/logo.png"
 export function Navbar({ onOpenChat, onAuthClick, isScrolled }) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
